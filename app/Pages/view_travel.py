@@ -6,8 +6,9 @@ from CTkMessagebox import CTkMessagebox
 from app.backend.crud.voyages import VoyagesCRUD
 from app.backend.crud.etapes import EtapesCRUD
 from app.backend.crud.photo import PhotosCRUD
+from app.backend.crud.accomp import AccompCRUD
+from app.backend.crud.likes import LikesCRUD # <--- Nouveau
 
-# Map Check
 try:
     import tkintermapview
     MAP_AVAILABLE = True
@@ -34,12 +35,18 @@ class ViewTravelView(ctk.CTkFrame):
         self.master = parent
         self.id_voyage = id_voyage
         
+        # ID de l'utilisateur connecté (nécessaire pour les likes)
+        self.current_user_id = self.master.current_user_id
+        
         self.crud_voyage = VoyagesCRUD()
         self.crud_etape = EtapesCRUD()
         self.crud_photo = PhotosCRUD()
+        self.crud_accomp = AccompCRUD()
+        self.crud_likes = LikesCRUD()
         
         self.voyage = self.crud_voyage.get_voyage(id_voyage)
         self.etapes = self.crud_etape.get_etapes_by_voyage(id_voyage)
+        self.friends = self.crud_accomp.get_accompagnateurs(id_voyage)
 
         if not self.voyage:
             ctk.CTkLabel(self, text="Erreur: Voyage introuvable").pack()
@@ -48,34 +55,40 @@ class ViewTravelView(ctk.CTkFrame):
         self.setup_ui()
 
     def setup_ui(self):
-        # 1. MAP (Haut)
+        # 1. MAP
         self.top_frame = ctk.CTkFrame(self, fg_color="#111", corner_radius=0)
         self.top_frame.pack(fill="both", expand=True, side="top")
 
-        # Overlay
-        overlay = ctk.CTkFrame(self.top_frame, fg_color="#2b2b2b", corner_radius=15, height=50, border_width=1, border_color="#444")
+        # Header Overlay
+        overlay = ctk.CTkFrame(self.top_frame, fg_color="#2b2b2b", corner_radius=15, height=60, border_width=1, border_color="#444")
         overlay.place(relx=0.02, rely=0.03, relwidth=0.96)
         
-        ctk.CTkButton(overlay, text="← Retour", command=lambda: self.master.show_page("ManageTravel"), 
-                      width=90, fg_color="#444").pack(side="left", padx=10, pady=8)
+        ctk.CTkButton(overlay, text="← Retour", command=lambda: self.master.show_page("ManageTravel"), width=90, fg_color="#444", hover_color="#333").pack(side="left", padx=10, pady=8)
         
-        ctk.CTkLabel(overlay, text=f"🌍 {self.voyage['nom_voyage']}", font=("Courgette", 22, "bold"), text_color="white").pack(side="left", padx=20)
-        
+        center_box = ctk.CTkFrame(overlay, fg_color="transparent")
+        center_box.pack(side="left", padx=20, fill="y")
+        ctk.CTkLabel(center_box, text=f"🌍 {self.voyage['nom_voyage']}", font=("Courgette", 20, "bold"), text_color="white").pack(anchor="w")
+        if self.friends:
+            names = ", ".join([f"@{u['username']}" for u in self.friends])
+            ctk.CTkLabel(center_box, text=f"Avec {names}", font=("Arial", 12), text_color="#00aaff").pack(anchor="w")
+
+        # Bouton ajouter (seulement si c'est mon voyage ou si je suis accompagnateur)
+        # Pour simplifier, on laisse le bouton mais on pourrait le cacher.
         ctk.CTkButton(overlay, text="+ Ajouter une étape", command=lambda: self.master.show_page("CreateStage", id_item=self.id_voyage),
-                      fg_color="#2CC985", font=("Arial", 12, "bold"), width=140).pack(side="right", padx=10)
+                      fg_color="#2CC985", hover_color="#1e8558", font=("Arial", 12, "bold"), width=140).pack(side="right", padx=10)
 
         if MAP_AVAILABLE:
             self.map_widget = tkintermapview.TkinterMapView(self.top_frame, corner_radius=0)
-            self.map_widget.pack(fill="both", expand=True, pady=(60, 0))
+            self.map_widget.pack(fill="both", expand=True, pady=(70, 0))
             self.map_widget.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=fr&x={x}&y={y}&z={z}&s=Ga", max_zoom=22)
             self.map_widget.set_position(48.8566, 2.3522)
             self.map_widget.set_zoom(4)
             self.after(200, self.add_markers_to_map)
         else:
-            ctk.CTkLabel(self.top_frame, text="Module map manquant", text_color="gray").place(relx=0.5, rely=0.5, anchor="center")
+            ctk.CTkLabel(self.top_frame, text="Carte indisponible", text_color="gray").place(relx=0.5, rely=0.5, anchor="center")
 
-        # 2. TIMELINE (Bas)
-        self.bottom_frame = ctk.CTkFrame(self, fg_color="#1a1a1a", height=350) # Plus haut pour les photos
+        # 2. TIMELINE
+        self.bottom_frame = ctk.CTkFrame(self, fg_color="#1a1a1a", height=350)
         self.bottom_frame.pack(fill="x", side="bottom")
 
         ctk.CTkLabel(self.bottom_frame, text="📅 Carnet de Voyage", font=("Arial", 14, "bold"), text_color="#aaa").pack(anchor="w", padx=20, pady=(15,5))
@@ -95,7 +108,6 @@ class ViewTravelView(ctk.CTkFrame):
         for etape in self.etapes:
             lieu = etape['localisation']
             if not lieu: continue
-            
             if lieu in KNOWN_CITIES:
                 coords = KNOWN_CITIES[lieu]
                 self.map_widget.set_marker(coords[0], coords[1], text=etape['nom_etape'])
@@ -105,40 +117,32 @@ class ViewTravelView(ctk.CTkFrame):
                     marker = self.map_widget.set_address(lieu, marker=True, text=etape['nom_etape'])
                     if marker: path_list.append(marker.position)
                 except: pass
-        
         if len(path_list) > 1: self.map_widget.set_path(path_list)
         elif len(path_list) == 1: self.map_widget.set_position(path_list[0][0], path_list[0][1], marker=True)
 
     def create_stage_card(self, etape, index):
-        """Carte avec Photo à gauche."""
-        # 1. Récupérer la photo depuis la BDD
         photo_data = self.crud_photo.get_photo_by_etape(etape['id_etape'])
         
-        card_width = 300
-        card = ctk.CTkFrame(self.scroll, fg_color="#2b2b2b", corner_radius=20, width=card_width, height=220)
+        card = ctk.CTkFrame(self.scroll, fg_color="#2b2b2b", corner_radius=20, width=300, height=220)
         card.pack(side="left", padx=12, pady=5)
         card.pack_propagate(False)
 
-        # Zone Image (Haut ou Gauche - ici Haut pour le style polaroid)
+        # Image
         img_frame = ctk.CTkFrame(card, fg_color="#000", height=120, corner_radius=15)
-        img_frame.pack(fill="x", padx=0, pady=0)
+        img_frame.pack(fill="x")
         img_frame.pack_propagate(False)
 
         if photo_data and photo_data['photo']:
             try:
-                # Conversion Binaire -> Image Tkinter
                 pil_img = Image.open(io.BytesIO(photo_data['photo']))
-                # Mode "Cover" (crop au centre)
-                ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(card_width, 120))
-                lbl_img = ctk.CTkLabel(img_frame, text="", image=ctk_img)
-                lbl_img.place(x=0, y=0)
-            except Exception as e:
-                ctk.CTkLabel(img_frame, text="Erreur Image", text_color="red").pack(expand=True)
+                ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(300, 120))
+                lbl = ctk.CTkLabel(img_frame, text="", image=ctk_img)
+                lbl.place(x=0, y=0)
+            except: pass
         else:
-            # Placeholder stylé
-            ctk.CTkLabel(img_frame, text="📷 Pas de photo", text_color="gray").pack(expand=True)
+            ctk.CTkLabel(img_frame, text="📷", font=("Arial", 30), text_color="#444").place(relx=0.5, rely=0.5, anchor="center")
 
-        # Header texte
+        # Infos
         txt_frame = ctk.CTkFrame(card, fg_color="transparent")
         txt_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -149,19 +153,53 @@ class ViewTravelView(ctk.CTkFrame):
         if etape['localisation']:
              ctk.CTkLabel(txt_frame, text=f"📍 {etape['localisation']}", font=("Arial", 12), text_color="#2CC985", anchor="w").pack(fill="x")
 
-        # Actions (Bas droite)
+        # --- ACTIONS & LIKES ---
         actions = ctk.CTkFrame(card, fg_color="transparent")
         actions.pack(side="bottom", fill="x", padx=10, pady=8)
 
-        ctk.CTkLabel(actions, text=f"#{index+1}", text_color="#00aaff", font=("Arial", 14, "bold")).pack(side="left")
+        # 1. Gestion du Like
+        like_frame = ctk.CTkFrame(actions, fg_color="transparent")
+        like_frame.pack(side="left")
+        
+        is_liked = self.crud_likes.is_liked(self.current_user_id, etape['id_etape'])
+        nb_likes = self.crud_likes.get_count(etape['id_etape'])
+        
+        heart_char = "❤️" if is_liked else "🤍"
+        heart_color = "#ff4d4d" if is_liked else "white"
 
+        # Bouton Coeur
+        btn_like = ctk.CTkButton(like_frame, text=heart_char, width=30, height=25, 
+                                 fg_color="transparent", hover_color="#333", text_color=heart_color, font=("Arial", 18))
+        btn_like.pack(side="left")
+        
+        # Label Compteur
+        lbl_count = ctk.CTkLabel(like_frame, text=str(nb_likes), font=("Arial", 12, "bold"), text_color="#aaa")
+        lbl_count.pack(side="left", padx=2)
+
+        # Assignation de la commande avec closure pour capturer les widgets
+        btn_like.configure(command=lambda e_id=etape['id_etape'], b=btn_like, l=lbl_count: self.on_like_click(e_id, b, l))
+
+        # 2. Edit / Delete
         ctk.CTkButton(actions, text="🗑️", width=30, height=25, fg_color="#cf3030", hover_color="#a01010",
                       command=lambda: self.delete_stage(etape)).pack(side="right")
         ctk.CTkButton(actions, text="✏️", width=30, height=25, fg_color="#e6b800", hover_color="#b38f00",
                       command=lambda: self.master.show_page("EditStage", id_item=etape['id_etape'])).pack(side="right", padx=5)
 
+    def on_like_click(self, id_etape, btn_widget, lbl_widget):
+        """Gère le clic sur le coeur en direct."""
+        liked_now = self.crud_likes.toggle_like(self.current_user_id, id_etape)
+        new_count = self.crud_likes.get_count(id_etape)
+        
+        # Mise à jour visuelle immédiate
+        if liked_now:
+            btn_widget.configure(text="❤️", text_color="#ff4d4d")
+        else:
+            btn_widget.configure(text="🤍", text_color="white")
+        
+        lbl_widget.configure(text=str(new_count))
+
     def delete_stage(self, etape):
-        msg = CTkMessagebox(title="Supprimer ?", message="Voulez-vous supprimer cette étape et sa photo ?", icon="warning", option_1="Non", option_2="Oui")
+        msg = CTkMessagebox(title="Confirmer", message="Supprimer cette étape ?", icon="warning", option_1="Non", option_2="Oui")
         if msg.get() == "Oui":
             self.crud_etape.delete_etape(etape['id_etape'])
             self.master.show_travel_detail(self.id_voyage)
