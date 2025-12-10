@@ -1,103 +1,79 @@
 import customtkinter as ctk
 from tkcalendar import DateEntry
-from typing import List, Optional
-from datetime import datetime
 from CTkMessagebox import CTkMessagebox 
 from app.backend.crud.voyages import VoyagesCRUD
-from app.backend.crud.accomp import accompCRUD
-from app.backend.crud.users import UsersCRUD
 
 class CreateTravelView(ctk.CTkFrame):
-    """Page CTkFrame pour créer un voyage."""
-    
     def __init__(self, parent, id_user: int = None): 
         super().__init__(parent)
         self.master = parent
         self.id_user = id_user
-
         self.crud_Voyage = VoyagesCRUD()
-        self.crud_Accomp = accompCRUD()
-        self.crud_Users = UsersCRUD()
-        
-        self.escorts: List[str] = []
-
-        if not self.id_user:
-             ctk.CTkLabel(self, text="Erreur : Session expirée.", text_color="red").pack(pady=50)
-             return
 
         self.setup_ui()
 
     def setup_ui(self):
-        # Header
-        header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        header_frame.pack(fill="x", padx=20, pady=(15, 5))
-
-        ctk.CTkButton(
-            header_frame, text="← Retour", 
-            command=lambda: self.master.show_page("ManageTravel"),
-            width=100, fg_color="#3a3a3a"
-        ).pack(side="left")
+        # Header Centré
+        self.header = ctk.CTkFrame(self, fg_color="transparent")
+        self.header.pack(pady=40)
         
-        ctk.CTkLabel(
-            header_frame, text="Nouveau Voyage",
-            font=("Courgette", 32, "bold")
-        ).pack(side="left", padx=(50, 0), expand=True)
+        ctk.CTkLabel(self.header, text="✈️  Nouveau Voyage", font=("Courgette", 40, "bold"), text_color="#00aaff").pack()
 
-        # Formulaire
-        self.scroll = ctk.CTkScrollableFrame(self, width=700, height=400)
-        self.scroll.pack(padx=10, pady=10, fill="both", expand=True)
-        
+        # Carte Formulaire
+        self.card = ctk.CTkFrame(self, width=600, height=400, corner_radius=20, fg_color="#2b2b2b")
+        self.card.pack(pady=20)
+        self.card.pack_propagate(False) # Garder la taille fixe
+
         # Nom
-        ctk.CTkLabel(self.scroll, text="Nom du Voyage :", font=("Arial", 14, "bold")).pack(anchor="w", padx=20, pady=(10,0))
-        self.name_entry = ctk.CTkEntry(self.scroll, width=300)
-        self.name_entry.pack(anchor="w", padx=20, pady=(5,10))
+        ctk.CTkLabel(self.card, text="Donnez un nom à votre aventure", font=("Arial", 14, "bold"), text_color="#ccc").pack(pady=(40, 5))
+        self.name_entry = ctk.CTkEntry(self.card, width=400, height=40, font=("Arial", 16), placeholder_text="Ex: Roadtrip USA 2025")
+        self.name_entry.pack(pady=(0, 20))
 
         # Dates
-        date_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
-        date_frame.pack(anchor="w", padx=20, pady=10)
-        
-        ctk.CTkLabel(date_frame, text="Début :").pack(side="left", padx=5)
-        self.date_debut = DateEntry(date_frame, date_pattern="dd/mm/yyyy", width=12)
-        self.date_debut.pack(side="left", padx=5)
-        
-        ctk.CTkLabel(date_frame, text="Fin :").pack(side="left", padx=5)
-        self.date_fin = DateEntry(date_frame, date_pattern="dd/mm/yyyy", width=12)
-        self.date_fin.pack(side="left", padx=5)
+        date_frame = ctk.CTkFrame(self.card, fg_color="transparent")
+        date_frame.pack(pady=20)
 
-        # Bouton Créer
-        ctk.CTkButton(self.scroll, text="Valider la création", command=self.create_travel, height=40, fg_color="green", hover_color="darkgreen").pack(pady=30)
+        # Début
+        f1 = ctk.CTkFrame(date_frame, fg_color="transparent")
+        f1.pack(side="left", padx=20)
+        ctk.CTkLabel(f1, text="Début", font=("Arial", 12, "bold")).pack(pady=2)
+        # Notez les couleurs personnalisées
+        self.date_debut = DateEntry(f1, date_pattern="dd/mm/yyyy", width=12, background='#1f6aa5', foreground='white', borderwidth=2)
+        self.date_debut.pack()
+
+        # Fin
+        f2 = ctk.CTkFrame(date_frame, fg_color="transparent")
+        f2.pack(side="left", padx=20)
+        ctk.CTkLabel(f2, text="Fin", font=("Arial", 12, "bold")).pack(pady=2)
+        self.date_fin = DateEntry(f2, date_pattern="dd/mm/yyyy", width=12, background='#1f6aa5', foreground='white', borderwidth=2)
+        self.date_fin.pack()
+
+        # Boutons
+        btn_frame = ctk.CTkFrame(self.card, fg_color="transparent")
+        btn_frame.pack(side="bottom", pady=40, fill="x", padx=50)
+
+        ctk.CTkButton(btn_frame, text="Annuler", command=lambda: self.master.show_page("ManageTravel"), 
+                      fg_color="transparent", border_width=1, border_color="#555", text_color="#aaa", width=100).pack(side="left")
+
+        ctk.CTkButton(btn_frame, text="Créer le voyage", command=self.create_travel, 
+                      fg_color="#00aaff", hover_color="#0077cc", font=("Arial", 14, "bold"), width=200).pack(side="right")
 
     def create_travel(self):
         name = self.name_entry.get().strip()
-        
-        # Récupération des objets date
-        d_start = self.date_debut.get_date() # Renvoie un objet date python
+        d_start = self.date_debut.get_date()
         d_end = self.date_fin.get_date()
 
         if not name:
-            CTkMessagebox(title="Erreur", message="Le nom du voyage est obligatoire.", icon="warning")
+            CTkMessagebox(title="Erreur", message="Le nom est vide.", icon="warning")
             return
         
         if d_start > d_end:
-            CTkMessagebox(title="Erreur", message="La date de fin doit être après la date de début.", icon="warning")
+            CTkMessagebox(title="Erreur", message="Dates incohérentes.", icon="warning")
             return
 
-        # Conversion pour MySQL (AAAA-MM-JJ)
-        sql_start = d_start.strftime("%Y-%m-%d")
-        sql_end = d_end.strftime("%Y-%m-%d")
-
         try:
-            voyage_id = self.crud_Voyage.create_voyage(
-                id_user=self.id_user,
-                nom_voyage=name,
-                date_depart=sql_start,
-                date_arrivee=sql_end
-            )
-            
-            # Succès
-            msg = CTkMessagebox(title="Succès", message="Voyage créé avec succès !", icon="check", option_1="Voir mes voyages")
-            if msg.get() == "Voir mes voyages":
-                self.master.show_page("ManageTravel")
-            
+            self.crud_Voyage.create_voyage(self.id_user, name, d_start.strftime("%Y-%m-%d"), d_end.strftime("%Y-%m-%d"))
+            CTkMessagebox(title="Succès", message="Voyage créé !", icon="check")
+            self.master.show_page("ManageTravel")
         except Exception as e:
-            CTkMessagebox(title="Erreur BDD", message=f"Impossible de créer le voyage.\n{e}", icon="cancel")
+            CTkMessagebox(title="Erreur", message=str(e), icon="cancel")

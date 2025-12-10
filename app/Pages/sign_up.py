@@ -9,78 +9,81 @@ EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
 class SignUpPage(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
-        
-        # --- Chargement des Images (avec correction du chemin) ---
+        self.configure(fg_color="#1a1a1a")
+
+        # --- CARTE CENTRALE ---
+        self.card = ctk.CTkFrame(self, width=900, height=500, corner_radius=20, fg_color="#2b2b2b")
+        self.card.place(relx=0.5, rely=0.5, anchor="center")
+
+        # --- COLONNE GAUCHE (Image) ---
+        self.left_frame = ctk.CTkFrame(self.card, width=400, height=500, corner_radius=20, fg_color="#000")
+        self.left_frame.pack(side="left", fill="both")
         try:
-            self.logo = ctk.CTkImage(light_image=Image.open('app/Images/Logo.jpg'), size=(300, 150))
-            self.logo_set = ctk.CTkLabel(self, text="", image=self.logo)
-            self.logo_set.place(x=415, y=-30)
+            img = Image.open('app/Images/Auth_img.png')
+            self.img_widget = ctk.CTkImage(light_image=img, dark_image=img, size=(400, 500))
+            ctk.CTkLabel(self.left_frame, text="", image=self.img_widget).place(x=0, y=0)
+        except:
+            ctk.CTkLabel(self.left_frame, text="Rejoignez\nInstravel", font=("Courgette", 30)).place(relx=0.5, rely=0.5, anchor="center")
 
-            self.auth_img = ctk.CTkImage(light_image=Image.open('app/Images/Auth_img.png'), size=(320, 569))
-            self.auth_img_set = ctk.CTkLabel(self, text="", image=self.auth_img)
-            self.auth_img_set.place(x=0, y=0)
-        except Exception as e:
-            print(f"Attention: Images non trouvées ({e})")
+        # --- COLONNE DROITE (Form) ---
+        self.right_frame = ctk.CTkFrame(self.card, fg_color="transparent")
+        self.right_frame.pack(side="right", fill="both", expand=True, padx=40, pady=40)
 
-        # --- Formulaire ---
-        self.mail = ctk.CTkLabel(self, text="Mail :", font=("Courgette", 20))
-        self.mail.place(x=435, y=210)
+        ctk.CTkLabel(self.right_frame, text="Créer un compte 🚀", font=("Arial", 28, "bold"), text_color="white").pack(pady=(10, 5))
+        ctk.CTkLabel(self.right_frame, text="Commencez à documenter vos aventures.", font=("Arial", 13), text_color="gray").pack(pady=(0, 25))
 
-        self.mail_widget = ctk.CTkEntry(self, width=250)
-        self.mail_widget.place(x=435, y=240)
+        # Email
+        ctk.CTkLabel(self.right_frame, text="Email", font=("Arial", 13, "bold")).pack(anchor="w", pady=(0, 2))
+        self.entry_mail = ctk.CTkEntry(self.right_frame, width=350, height=35, placeholder_text="email@exemple.com")
+        self.entry_mail.pack(pady=(0, 15))
 
-        self.password_txt = ctk.CTkLabel(self, text="Password :", font=("Courgette", 20))
-        self.password_txt.place(x=435, y=280)
+        # Password
+        ctk.CTkLabel(self.right_frame, text="Mot de passe", font=("Arial", 13, "bold")).pack(anchor="w", pady=(0, 2))
+        self.entry_pass = ctk.CTkEntry(self.right_frame, width=350, height=35, show="*")
+        self.entry_pass.pack(pady=(0, 25))
 
-        self.password_widget = ctk.CTkEntry(self, show="*", width=250)
-        self.password_widget.place(x=435, y=310)
+        # Bouton
+        self.btn_signup = ctk.CTkButton(
+            self.right_frame, text="S'inscrire", command=self.valide_inscription,
+            width=350, height=45, fg_color="#2CC985", hover_color="#1e8558", font=("Arial", 15, "bold")
+        )
+        self.btn_signup.pack()
 
-        self.login_txt = ctk.CTkLabel(self, text="Inscris-toi pour nous rejoindre !", font=("Courgette", 20))
-        self.login_txt.place(x=415, y=150)
-
-        self.inscription_button = ctk.CTkButton(self, width=250, height=40, text="Nous rejoindre !", command=self.valide_inscription)
-        self.inscription_button.place(x=435, y=360)
-
-        # --- Liens de redirection ---
-        self.page_inscription = ctk.CTkLabel(self, text="Déjà un compte ? ", font=("Courgette", 14))
-        self.page_inscription.place(x=335, y=450)
-
-        self.page_connection_redirect = ctk.CTkLabel(self, text="Se connecter", font=("Courgette", 14), text_color="cyan", cursor="hand2")
-        self.page_connection_redirect.place(x=450, y=450)
-
-        self.page_connection_redirect.bind("<Enter>", lambda e: self.page_connection_redirect.configure(font=("Courgette", 14, "underline")))
-        self.page_connection_redirect.bind("<Leave>", lambda e: self.page_connection_redirect.configure(font=("Courgette", 14)))
-        self.page_connection_redirect.bind("<Button-1>", lambda e: self.master.show_page("SignIn"))
+        # Lien Connexion
+        footer = ctk.CTkFrame(self.right_frame, fg_color="transparent")
+        footer.pack(pady=20)
+        ctk.CTkLabel(footer, text="Déjà un compte ?", font=("Arial", 13)).pack(side="left")
+        
+        btn_signin = ctk.CTkLabel(footer, text="Se connecter", font=("Arial", 13, "bold"), text_color="#2CC985", cursor="hand2")
+        btn_signin.pack(side="left", padx=5)
+        btn_signin.bind("<Button-1>", lambda e: self.master.show_page("SignIn"))
 
     def valide_inscription(self):
-        mail = self.mail_widget.get().strip()
-        password = self.password_widget.get().strip()
+        mail = self.entry_mail.get().strip()
+        password = self.entry_pass.get().strip()
 
         if not mail or not password:
-            CTkMessagebox(title="Erreur", message="Veuillez remplir tous les champs.", icon="warning")
+            CTkMessagebox(title="Attention", message="Veuillez tout remplir.", icon="warning")
             return
 
         if not re.match(EMAIL_REGEX, mail):
-            CTkMessagebox(title="Erreur", message="Adresse email invalide.", icon="cancel")
+            CTkMessagebox(title="Erreur", message="Email invalide.", icon="cancel")
             return
 
-        # username = partie avant le @
         username = mail.split("@")[0]
-
         crud = UsersCRUD()
+        
         try:
-            # Vérifier si l'utilisateur existe déjà (optionnel mais conseillé)
-            existing = crud.get_user_by_username(username)
-            if existing:
-                 CTkMessagebox(title="Erreur", message="Ce nom d'utilisateur ou email existe déjà.", icon="cancel")
-                 return
+            if crud.get_user_by_username(username):
+                CTkMessagebox(title="Oups", message="Cet utilisateur existe déjà.", icon="warning")
+                return
 
             crud.create_user(username=username, mail=mail, password=password)
             
-            # Succès : On propose d'aller se connecter
-            msg = CTkMessagebox(title="Succès", message="Compte créé avec succès ! Connectez-vous maintenant.", icon="check", option_1="OK")
-            if msg.get() == "OK":
+            # Succès
+            msg = CTkMessagebox(title="Bienvenue !", message="Compte créé avec succès.", icon="check", option_1="Se connecter")
+            if msg.get() == "Se connecter":
                 self.master.show_page("SignIn")
                 
         except Exception as e:
-            CTkMessagebox(title="Erreur Système", message=f"Impossible de créer le compte : {str(e)}", icon="cancel")
+            CTkMessagebox(title="Erreur", message=str(e), icon="cancel")
