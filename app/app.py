@@ -1,5 +1,5 @@
 import customtkinter as ctk
-# Importez toutes les pages et les CRUDs nécessaires
+# Importez toutes les pages
 from app.Pages.home import HomePage
 from app.Pages.sign_in import SignInPage
 from app.Pages.sign_up import SignUpPage
@@ -10,18 +10,10 @@ from app.Pages.create_travel import CreateTravelView
 from app.Pages.edit_travel import EditTravelView
 from app.Pages.view_travel import ViewTravelView 
 from app.Pages.manage_travel import ManageTravelView 
-from app.backend.crud.users import UsersCRUD
-from app.backend.crud.voyages import VoyagesCRUD
-from app.backend.crud.etapes import EtapesCRUD
-from app.backend.crud.commentaire import CommentairesCRUD
-from app.backend.crud.photo import PhotosCRUD
-from app.backend.crud.hashtags import HashtagsCRUD
-from app.backend.crud.likes import likesCRUD
-
 
 class Application(ctk.CTk):
     """
-    Contrôleur principal gérant la fenêtre, l'état global et la navigation entre les vues (pages).
+    Contrôleur principal gérant la fenêtre, l'état global et la navigation.
     """
     def __init__(self):
         super().__init__()
@@ -31,46 +23,56 @@ class Application(ctk.CTk):
         ctk.set_default_color_theme("blue")
         self.resizable(False, False)
 
-        # Cache des pages : Seules les pages statiques (comme Home, SignIn) sont conservées.
+        # Cache des pages
         self.pages = {}
         self.current_page = None
 
-        # --- Initialisation des ressources BDD ---
-        self.crud_Voyage = VoyagesCRUD()
-        # ID utilisateur actuel (Utilisez un ID valide pour le test, 3 est conservé ici)
-        self.current_user_id = 3
+        # --- GESTION UTILISATEUR ---
+        # Plus d'ID forcé à 3. On démarre à None.
+        self.current_user_id = None 
+        self.current_user_data = None # Pour stocker username, email, etc.
 
-        # Démarrage sur la page de gestion
+        # Démarrage sur la page de connexion
+        self.show_page("SignIn")
+
+    def login_user(self, user_data: dict):
+        """Connecte l'utilisateur et débloque l'accès à l'app."""
+        self.current_user_data = user_data
+        self.current_user_id = user_data['id_user']
+        print(f"Utilisateur connecté : {user_data['username']} (ID: {self.current_user_id})")
+        # Redirection vers la gestion des voyages
         self.show_page("ManageTravel")
 
-    # ----------------------------------------------------
-    # MÉTHODE DE NAVIGATION PRINCIPALE
-    # ----------------------------------------------------
+    def logout_user(self):
+        """Déconnecte l'utilisateur."""
+        self.current_user_id = None
+        self.current_user_data = None
+        self.pages = {} # Vider le cache pour sécurité
+        self.show_page("SignIn")
+
     def show_page(self, name, id_item=None):
-        """
-        Gère l'affichage d'une page. Les pages nécessitant des données fraîches (ManageTravel)
-        ou un ID spécifique (EditTravel) sont recréées à chaque fois.
-        """
+        """Gère la navigation."""
         
+        # Protection : Si on n'est pas connecté et qu'on veut aller ailleurs que SignIn/SignUp/Home
+        if self.current_user_id is None and name not in ["SignIn", "SignUp", "Home"]:
+            print("Accès refusé. Redirection vers SignIn.")
+            name = "SignIn"
+
         # 1. Cacher la page actuelle
         if self.current_page:
             self.current_page.pack_forget()
 
-        # Pages qui DOIVENT être recréées à chaque appel (pour rafraîchissement ou arguments dynamiques).
+        # Pages qui DOIVENT être recréées à chaque appel
         PAGES_RECREATION_REQUIRED = ["ManageTravel", "CreateTravel", "EditTravel", "CreateStage", "EditStage", "StageView"]
-        
-        # Le rafraîchissement est nécessaire si : le nom est dans la liste OU un argument est passé.
         should_recreate = name in PAGES_RECREATION_REQUIRED or id_item is not None
 
-        # --- Gérer la destruction de l'ancienne instance si on doit recréer ---
         if should_recreate and name in self.pages:
             self.pages[name].destroy()
-            del self.pages[name] # Supprime la référence du cache
+            del self.pages[name]
 
         # --- Création de la page ---
         if name not in self.pages:
             
-            # Pages statiques/semi-statiques
             if name == "SignIn":
                 self.pages[name] = SignInPage(self)
             elif name == "SignUp":
@@ -78,7 +80,7 @@ class Application(ctk.CTk):
             elif name == "Home":
                 self.pages[name] = HomePage(self)
 
-            # Vues dynamiques (Création/Gestion/Édition)
+            # Vues nécessitant un utilisateur connecté
             elif name == "ManageTravel":
                 self.pages[name] = ManageTravelView(self, id_user=self.current_user_id)
             
@@ -89,44 +91,26 @@ class Application(ctk.CTk):
                 if id_item is None: return
                 self.pages[name] = EditTravelView(self, id_voyage=id_item)
             
-            # --- GESTION DES ÉTAPES ---
             elif name == "CreateStage":
-                # id_item contient l'id_voyage
-                if id_item is None:
-                    print("Erreur: Impossible de créer une étape sans ID de voyage.")
-                    return 
+                if id_item is None: return 
                 self.pages[name] = CreateStageView(self, id_voyage=id_item)
             
             elif name == "EditStage":
-                # id_item contient l'id_etape
                 if id_item is None: return
                 self.pages[name] = EditStageView(self, etape_id=id_item)
             
             elif name == "StageView":
-                # id_item contient l'id_etape
                 if id_item is None: return
                 self.pages[name] = StageView(self, etape_id=id_item)
         
-        # 4. Afficher la page
+        # Afficher la page
         if name in self.pages:
             self.current_page = self.pages[name]
             self.current_page.pack(fill="both", expand=True)
 
-    # ----------------------------------------------------
-    # GESTION DES VUES DYNAMIQUES PAR ID (Détail/Consultation)
-    # ----------------------------------------------------
     def show_travel_detail(self, id_voyage: int):
-        """
-        Affiche la page de détail d'un voyage (ViewTravelView).
-        Recrée toujours la vue pour s'assurer que les données (étapes) sont fraîches.
-        """
-        
         if self.current_page:
             self.current_page.pack_forget()
-            
-        # Création et affichage dynamique de ViewTravelView
-        # On ne la stocke pas dans self.pages car elle est spécifique à un ID et est recréée
         view = ViewTravelView(self, id_voyage=id_voyage)
-        
         self.current_page = view
         self.current_page.pack(fill="both", expand=True)

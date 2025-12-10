@@ -1,177 +1,140 @@
 import customtkinter as ctk
+from datetime import datetime
 from CTkMessagebox import CTkMessagebox
-# Importez les CRUDs nécessaires pour la gestion des dépendances
 from app.backend.crud.voyages import VoyagesCRUD
-from app.backend.crud.etapes import EtapesCRUD
-from app.backend.crud.accomp import accompCRUD
-from app.backend.crud.commentaire import CommentairesCRUD
-from app.backend.crud.hashtags import HashtagsCRUD
-from app.backend.crud.photo import PhotosCRUD
-
-# Importez le module app.app pour la référence à la classe Application
-try:
-    from app.app import Application
-except ImportError:
-    class Application: pass 
 
 class ManageTravelView(ctk.CTkFrame):
-    """Page de gestion affichant tous les voyages de l'utilisateur avec actions (Voir, Modifier, Supprimer)."""
-
-    def __init__(self, parent: Application, id_user: int):
+    def __init__(self, parent, id_user: int = None):
         super().__init__(parent)
         self.master = parent
         self.id_user = id_user
-        
-        # Initialisation des CRUDs pour la suppression en cascade
-        self.crud_Voyage = VoyagesCRUD()
-        self.crud_Etapes = EtapesCRUD()
-        self.crud_Accomp = accompCRUD()
-        self.crud_Commentaire = CommentairesCRUD()
-        self.crud_Hashtags = HashtagsCRUD()
-        self.crud_Photos = PhotosCRUD()
-        
-        self.setup_ui()
-        # L'appel initial est fait ici
-        self.load_and_display_travels() 
+        self.crud = VoyagesCRUD()
 
-    def setup_ui(self):
-        """Initialisation des éléments UI de base."""
-        
-        # --- Cadre de Défilement (Scrollable Frame) ---
-        self.scroll = ctk.CTkScrollableFrame(self, width=780, height=580)
-        self.scroll.pack(padx=10, pady=10, fill="both", expand=True)
+        # --- Header (Titre + Bouton Ajouter) ---
+        self.header = ctk.CTkFrame(self, fg_color="transparent")
+        self.header.pack(fill="x", padx=20, pady=20)
 
-        # --- En-tête et Bouton Créer (Séparé du conteneur de voyages) ---
-        header_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
-        header_frame.pack(fill="x", pady=(10, 5), padx=10)
-        
-        # Titre
-        ctk.CTkLabel(header_frame, text="Gérer Mes Voyages", font=("Courgette", 28)).pack(side="left", padx=(10, 0))
-        
-        # Bouton Créer un Nouveau Voyage
-        ctk.CTkButton(
-            header_frame, 
-            text="+ Créer un Nouveau Voyage", 
-            command=lambda: self.master.show_page("CreateTravel"),
-            width=200,
-            height=35,
-            fg_color="#00aaff",
-            hover_color="#0088cc",
-            font=("Arial", 14, "bold")
-        ).pack(side="right", padx=10)
+        self.title = ctk.CTkLabel(
+            self.header, 
+            text="✈️ Mes Aventures", 
+            font=("Courgette", 32, "bold"),
+            text_color="#00aaff"
+        )
+        self.title.pack(side="left")
 
-        # Conteneur pour les cartes de voyage (C'est ce qui sera nettoyé et redessiné)
-        self.travel_container = ctk.CTkFrame(self.scroll, fg_color="transparent")
-        self.travel_container.pack(fill="x", padx=10, pady=5)
-        
-    # NOUVELLE MÉTHODE : Permet de rafraîchir la vue de l'extérieur (appelé par Application après création)
-    def refresh_view(self):
-        """Déclenche le rechargement et l'affichage des voyages."""
-        self.load_and_display_travels()
+        self.btn_add = ctk.CTkButton(
+            self.header, 
+            text="+ Nouveau Voyage", 
+            font=("Arial", 14, "bold"),
+            fg_color="#2CC985", 
+            hover_color="#229A65",
+            height=40,
+            command=lambda: self.master.show_page("CreateTravel")
+        )
+        self.btn_add.pack(side="right")
 
-    def load_and_display_travels(self):
-        """Charge les voyages de l'utilisateur et met à jour l'affichage."""
-        
-        # Nettoyer le conteneur avant de recharger
-        for widget in self.travel_container.winfo_children():
+        # --- Zone de liste (Scrollable) ---
+        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # Chargement des données
+        self.load_travels()
+
+    def load_travels(self):
+        """Récupère les voyages et génère les cartes."""
+        # Nettoyer l'affichage précédent
+        for widget in self.scroll_frame.winfo_children():
             widget.destroy()
 
-        # Récupération des données filtrées par utilisateur
-        travels = self.crud_Voyage.get_voyages_by_user(self.id_user)
-        
-        if not travels:
-            ctk.CTkLabel(self.travel_container, text="Vous n'avez créé aucun voyage pour l'instant.", text_color="#bdbdbd").pack(pady=20)
+        # Récupérer les données BDD
+        try:
+            voyages = self.crud.get_voyages_by_user(self.id_user)
+        except Exception as e:
+            ctk.CTkLabel(self.scroll_frame, text=f"Erreur de connexion BDD: {e}", text_color="red").pack()
             return
 
-        for travel in travels:
-            self.create_travel_card(self.travel_container, travel)
+        if not voyages:
+            self.show_empty_state()
+        else:
+            for v in voyages:
+                self.create_travel_card(v)
 
-    def create_travel_card(self, parent, travel_data: dict):
-        """Crée une carte affichant les détails et les boutons d'action d'un voyage."""
-        card = ctk.CTkFrame(parent, corner_radius=15, fg_color="#2b2b2b")
-        card.pack(fill="x", padx=5, pady=5)
+    def show_empty_state(self):
+        """Affiche un message si aucun voyage."""
+        container = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
+        container.pack(pady=50)
+        ctk.CTkLabel(container, text="📭", font=("Arial", 60)).pack()
+        ctk.CTkLabel(container, text="Aucun voyage pour l'instant.", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(container, text="Cliquez sur '+ Nouveau Voyage' pour commencer !", text_color="gray").pack()
+
+    def create_travel_card(self, voyage):
+        """Crée une jolie carte pour un voyage."""
+        # Cadre de la carte
+        card = ctk.CTkFrame(self.scroll_frame, corner_radius=15, fg_color="#2b2b2b", border_width=1, border_color="#3a3a3a")
+        card.pack(fill="x", padx=10, pady=8)
+
+        # --- Colonne Gauche : Infos ---
+        info_frame = ctk.CTkFrame(card, fg_color="transparent")
+        info_frame.pack(side="left", padx=15, pady=15, fill="both", expand=True)
+
+        # Titre
+        ctk.CTkLabel(info_frame, text=voyage['nom_voyage'], font=("Arial", 18, "bold"), anchor="w").pack(fill="x")
         
-        travel_id = travel_data["id_voyage"]
-        nom = travel_data["nom_voyage"]
-        dates = f"Du {travel_data['date_depart']} au {travel_data['date_arrivee']}"
-
-        # Gauche: Nom et Dates
-        text_frame = ctk.CTkFrame(card, fg_color="transparent")
-        text_frame.pack(side="left", padx=15, pady=10, anchor="w")
+        # Dates (Formatage joli)
+        d_start = voyage['date_depart'] # C'est un objet date ou str selon le connecteur
+        d_end = voyage['date_arrivee']
         
-        ctk.CTkLabel(text_frame, text=nom, font=("Arial", 15, "bold")).pack(anchor="w")
-        ctk.CTkLabel(text_frame, text=dates, font=("Arial", 11), text_color="#b0b0b0").pack(anchor="w")
+        # Gestion sécurité format date
+        date_str = "Dates inconnues"
+        if d_start and d_end:
+            try:
+                # Si c'est déjà un objet date python
+                s = d_start.strftime("%d/%m/%Y") if hasattr(d_start, 'strftime') else str(d_start)
+                e = d_end.strftime("%d/%m/%Y") if hasattr(d_end, 'strftime') else str(d_end)
+                date_str = f"📅 Du {s} au {e}"
+            except:
+                date_str = f"📅 {d_start} - {d_end}"
 
-        # Droite: Boutons d'Action
+        ctk.CTkLabel(info_frame, text=date_str, font=("Arial", 14), text_color="#aaaaaa", anchor="w").pack(fill="x", pady=(5,0))
+
+        # --- Colonne Droite : Actions ---
         action_frame = ctk.CTkFrame(card, fg_color="transparent")
-        action_frame.pack(side="right", padx=15, pady=10)
+        action_frame.pack(side="right", padx=15, pady=15)
 
-        # Bouton Voir (View)
+        # Bouton Voir
         ctk.CTkButton(
-            action_frame, text="Voir", width=80,
-            command=lambda id=travel_id: self.master.show_travel_detail(id)
+            action_frame, text="Voir", width=80, 
+            fg_color="#3b8ed0", hover_color="#36719f",
+            command=lambda: self.master.show_travel_detail(voyage['id_voyage'])
         ).pack(side="left", padx=5)
 
-        # Bouton Modifier (Edit)
+        # Bouton Modifier
         ctk.CTkButton(
-            action_frame, text="Modifier", width=80, fg_color="orange", hover_color="#cc8800",
-            command=lambda id=travel_id: self.master.show_page("EditTravel", id)
+            action_frame, text="✏️", width=40, 
+            fg_color="#e6b800", hover_color="#cc9900", text_color="black",
+            command=lambda: self.master.show_page("EditTravel", id_item=voyage['id_voyage'])
         ).pack(side="left", padx=5)
 
-        # Bouton Supprimer (Delete)
+        # Bouton Supprimer
         ctk.CTkButton(
-            action_frame, text="Supprimer", width=80, fg_color="red", hover_color="darkred",
-            command=lambda id=travel_id, name=nom: self.confirm_delete(id, name)
+            action_frame, text="🗑️", width=40, 
+            fg_color="#ff4d4d", hover_color="#cc0000",
+            command=lambda: self.confirm_delete(voyage)
         ).pack(side="left", padx=5)
 
-    def confirm_delete(self, id_voyage: int, nom_voyage: str):
-        """Affiche une boîte de dialogue de confirmation avant la suppression."""
-        
+    def confirm_delete(self, voyage):
+        """Demande confirmation avant suppression."""
         msg = CTkMessagebox(
-            title="Confirmation de Suppression", 
-            message=f"Êtes-vous sûr de vouloir supprimer le voyage '{nom_voyage}' (ID: {id_voyage}) ?\n\nTOUTES les données associées (étapes, commentaires, photos, etc.) seront supprimées.",
-            icon="question",
-            option_1="Annuler",
-            option_2="Supprimer Définitivement",
-            width=500
+            title="Supprimer ?", 
+            message=f"Voulez-vous vraiment supprimer le voyage '{voyage['nom_voyage']}' ?\nCela supprimera aussi les étapes et photos associées.",
+            icon="warning", 
+            option_1="Annuler", 
+            option_2="Supprimer"
         )
-        response = msg.get()
         
-        if response == "Supprimer Définitivement":
-            self.delete_travel(id_voyage)
-
-    def delete_travel(self, id_voyage: int):
-        """
-        Supprime un voyage et toutes ses dépendances.
-        """
-        
-        try:
-            # 1. Supprimer les relations de jointure les plus profondes (Hashtags)
-            self.crud_Hashtags.delete_etape_hashtags_by_voyage(id_voyage) 
-            
-            # 2. Supprimer les COMMENTAIRES
-            self.crud_Commentaire.delete_commentaires_by_voyage(id_voyage)
-            
-            # 3. Supprimer les PHOTOS
-            self.crud_Photos.delete_photos_by_voyage(id_voyage)
-
-            # 4. Supprimer les relations de jointure directes du VOYAGE (Accompagnateurs)
-            self.crud_Accomp.delete_accomp_by_voyage(id_voyage) 
-            
-            # 5. Supprimer les ETAPES (qui n'ont plus d'enfants)
-            self.crud_Etapes.delete_etapes_by_voyage(id_voyage) 
-
-            # 6. Supprimer le VOYAGE (le grand-parent)
-            success = self.crud_Voyage.delete_voyage(id_voyage)
-            
-            if success:
-                print(f"Voyage {id_voyage} et dépendances supprimés avec succès.")
-                self.load_and_display_travels() # Recharger la liste
+        if msg.get() == "Supprimer":
+            if self.crud.delete_voyage(voyage['id_voyage']):
+                self.load_travels() # Recharger la liste
+                CTkMessagebox(title="Succès", message="Voyage supprimé.", icon="check")
             else:
-                CTkMessagebox(title="Erreur", message="Échec: Le voyage n'a pas pu être supprimé de la table voyages.", icon="cancel")
-                
-        except Exception as e:
-            print(f"Erreur fatale lors de la suppression du voyage {id_voyage}: {e}")
-            CTkMessagebox(title="Erreur BDD", 
-                          message=f"Une erreur s'est produite lors du nettoyage des dépendances. Erreur : {e}", 
-                          icon="cancel")
+                CTkMessagebox(title="Erreur", message="Impossible de supprimer le voyage.", icon="cancel")
