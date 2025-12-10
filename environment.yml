@@ -1,0 +1,11 @@
+name: instravel_env   # nom de l'environnement
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - mysql-connector-python
+  - pip:
+      - python-dotenv
+      - pytest
